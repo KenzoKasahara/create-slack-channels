@@ -1,11 +1,11 @@
 [
     {
-        "name": "pub_channel_1",
+        "name": "pub_XYZ_channel_1",
         "description": "This is public channel 1",
         "is_private": "False"
     },
     {
-        "name": "pub_channel_2",
+        "name": "pub_XYZ_channel_2",
         "description": "This is public channel 2",
         "is_private": "False"
     }

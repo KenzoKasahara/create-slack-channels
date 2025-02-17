@@ -9,8 +9,40 @@ from requests.exceptions import RequestException
 logging.basicConfig(level=logging.INFO)
 
 # Slack API用のトークンとエンドポイント
-SLACK_TOKEN = "xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXX"
+SLACK_TOKEN = "xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX"
 SLACK_API_URL = "https://slack.com/api/"
+
+
+def create_channels_file():
+    ouput_dir = os.path.dirname(os.path.abspath(__file__))
+    output_file = os.path.join(ouput_dir, "channels.json")
+    read_file = os.path.join(ouput_dir, "create_system.txt")
+
+    with open(read_file, "r", encoding="utf-8") as file:
+        sid = file.read()
+
+    channels = [
+        {
+            "name": f"pub_{sid}_channel_1",
+            "description": "This is public channel 1",
+            "is_private": "False"
+        },
+        {
+            "name": f"pub_{sid}_channel_2",
+            "description": "This is public channel 2",
+            "is_private": "False"
+        }
+    ]
+
+    # JSONファイルとして書き出し
+    try:
+        with open(output_file, "w", encoding="utf-8") as file:
+            json.dump(channels, file, indent=4, ensure_ascii=False)
+        print(f"JSONファイル '{output_file}' の作成に成功しました。")
+        return True
+    except Exception as e:
+        print(f"JSONファイル作成中にエラーが発生しました: {e}")
+        return False
 
 
 def get_existing_channels():
@@ -33,7 +65,7 @@ def get_existing_channels():
         if not data.get("ok"):
             error_msg = data.get("error", "Unknown error")
             needed_permissions = data.get("needed", "Unknown permissions")
-            logging.error(f"conversations.list APIエラー: {error_msg}", )
+            logging.error(f"conversations.list APIエラー: {error_msg}")
             logging.error(f"needed_permissions: {needed_permissions}")
             return []
         return data.get("channels", [])
@@ -41,6 +73,36 @@ def get_existing_channels():
     except RequestException as e:
         logging.error("conversations.list リクエスト例外: %s", str(e))
         return []
+
+
+def get_existing_users():
+    """
+    ユーザーID一覧を取得する。
+    API呼び出し時のエラーやHTTPエラーもハンドリング。
+    """
+    url = SLACK_API_URL + "users.list"
+    headers = {
+        "Authorization": f"Bearer {SLACK_TOKEN}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # HTTPエラーの検出
+        data = response.json()
+
+        if not data.get("ok"):
+            error_msg = data.get("error", "Unknown error")
+            needed_permissions = data.get("needed", "Unknown permissions")
+            logging.error(f"users.info APIエラー: {error_msg}")
+            logging.error(f"needed_permissions: {needed_permissions}")
+            return False
+
+        return data.get("members", [])
+
+    except RequestException as e:
+        logging.error("users.info リクエスト例外: %s", str(e))
+        return False
 
 
 def create_channel(channel_name, description, is_private, invite_users_list):
@@ -143,18 +205,28 @@ def main():
         logging.error("channels.json 読み込みエラー: %s", str(e))
         return
 
-    # 既存チャンネル一覧を取得
+    # 既存チャンネル一覧を取得し、JSON内の各チャンネル名と既存チャンネルの重複チェック
     existing_channels = get_existing_channels()
     existing_channel_names = {channel["name"] for channel in existing_channels}
 
-    # JSON内の各チャンネル名と既存チャンネルの重複チェック
     for channel in channels_list:
         if channel["name"] in existing_channel_names:
-            logging.error("重複するチャンネルが見つかりました: '%s'。処理を中断します。", channel["name"])
-            logging.error("*" * 50)
+            logging.error(f"重複するチャンネルが見つかりました: {channel['name']}。")
+            logging.error("処理を中断します。")
             return
 
-    # 重複がなければチャンネル作成を実施
+    # ユーザーー覧を取得し、JSON内の各ユーザーが存在するかチェック
+    users = get_existing_users()
+
+    users_id = [user['id'] for user in users]
+
+    for invite_user in invite_users_list['users']:
+        if invite_user not in users_id:
+            logging.error(f"未作成ユーザーが存在します。: {invite_user}")
+            logging.error("処理を中断します。")
+            return
+
+    # チャンネルの重複とユーザーの欠損がなければチャンネルの新規作成を実施
     for channel in channels_list:
         name = channel.get("name")
         description = channel.get("description", "")

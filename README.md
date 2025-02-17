@@ -1,5 +1,9 @@
 # create-slack-channels
 
+## Required Slack App Permissions
+
+- users:read
+
 ## 「channel.json」
 
 - name: チャンネル名を小文字で設定
